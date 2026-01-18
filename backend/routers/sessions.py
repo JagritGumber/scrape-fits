@@ -188,4 +188,3 @@ async def update_session_result(
         contact_email=result.contactEmail,
         status=cast(ResultStatus, result.status),
     )
-
