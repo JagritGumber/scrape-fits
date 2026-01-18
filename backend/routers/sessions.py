@@ -16,24 +16,37 @@ IssueType = Literal[
     "missing-h1",
     "slow-performance",
 ]
+
 ResultStatus = Literal["pending", "completed", "error"]
 Tier = float
 
 
-class SearchQuery(BaseModel):
-    query: str
-    issues: list[IssueType]
-    max_results: int
+class SessionCreate(BaseModel):
+    pass
 
 
 class SessionRead(BaseModel):
     id: int
     created_at: datetime
+    name: str
+    is_configured: bool
+    is_completed: bool
+
+
+class SessionSearchCreate(BaseModel):
+    query: str
+    issues: list[IssueType]
+    max_results: int
+
+
+class SessionSearchRead(BaseModel):
+    session_id: int
     query: str
     issues: list[IssueType]
     max_results_requested: int
     checked_websites_count: int
     last_search_cursor: Optional[str]
+    is_completed: bool
 
 
 class SessionResultRead(BaseModel):
@@ -59,24 +72,17 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 @router.post("", response_model=SessionRead)
-async def create_session(body: SearchQuery) -> SessionRead:
-    issues_filter = json.dumps(body.issues)
+async def create_session(body: SessionCreate | None = None) -> SessionRead:
     session = await db.session.create(
-        data={
-            "query": body.query,
-            "issuesFilter": issues_filter,
-            "maxResultsRequested": body.max_results,
-        }
+        data={},
     )
-    issues: list[IssueType] = json.loads(session.issuesFilter)
+    name = getattr(session, "name", "Untitled session")
     return SessionRead(
         id=session.id,
         created_at=session.createdAt,
-        query=session.query,
-        issues=issues,
-        max_results_requested=session.maxResultsRequested,
-        checked_websites_count=session.checkedWebsitesCount,
-        last_search_cursor=session.lastSearchCursor,
+        name=name,
+        is_configured=False,
+        is_completed=False,
     )
 
 
@@ -86,22 +92,96 @@ async def list_sessions(offset: int = 0, limit: int = 50) -> list[SessionRead]:
         skip=offset,
         take=limit,
         order={"createdAt": "desc"},
+        include={"search": True},
     )
     results: list[SessionRead] = []
     for session in sessions:
-        issues: list[IssueType] = json.loads(session.issuesFilter)
+        search = session.search
+        is_configured = search is not None
+        is_completed = bool(search and search.completedAt is not None)
+        name = getattr(session, "name", "Untitled session")
         results.append(
             SessionRead(
                 id=session.id,
                 created_at=session.createdAt,
-                query=session.query,
-                issues=issues,
-                max_results_requested=session.maxResultsRequested,
-                checked_websites_count=session.checkedWebsitesCount,
-                last_search_cursor=session.lastSearchCursor,
+                name=name,
+                is_configured=is_configured,
+                is_completed=is_completed,
             )
         )
     return results
+
+
+@router.put(
+    "/{session_id}/search",
+    response_model=SessionSearchRead,
+)
+async def upsert_session_search(
+    session_id: int,
+    body: SessionSearchCreate,
+) -> SessionSearchRead:
+    session = await db.session.find_unique(
+        where={"id": session_id},
+        include={"search": True},
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    issues_filter = json.dumps(body.issues)
+
+    if session.search is None:
+        search = await db.sessionsearch.create(
+            data={
+                "session": {"connect": {"id": session_id}},
+                "query": body.query,
+                "issuesFilter": issues_filter,
+                "maxResultsRequested": body.max_results,
+                "status": "pending",
+            }
+        )
+    else:
+        search = await db.sessionsearch.update(
+            where={"id": session.search.id},
+            data={
+                "query": body.query,
+                "issuesFilter": issues_filter,
+                "maxResultsRequested": body.max_results,
+            },
+        )
+
+    issues: list[IssueType] = json.loads(search.issuesFilter)
+    return SessionSearchRead(
+        session_id=search.sessionId,
+        query=search.query,
+        issues=issues,
+        max_results_requested=search.maxResultsRequested,
+        checked_websites_count=search.checkedWebsitesCount,
+        last_search_cursor=search.lastSearchCursor,
+        is_completed=search.completedAt is not None,
+    )
+
+
+@router.get(
+    "/{session_id}/search",
+    response_model=SessionSearchRead,
+)
+async def get_session_search(session_id: int) -> SessionSearchRead:
+    search = await db.sessionsearch.find_unique(
+        where={"sessionId": session_id},
+    )
+    if search is None:
+        raise HTTPException(status_code=404, detail="Search not configured for session")
+
+    issues: list[IssueType] = json.loads(search.issuesFilter)
+    return SessionSearchRead(
+        session_id=search.sessionId,
+        query=search.query,
+        issues=issues,
+        max_results_requested=search.maxResultsRequested,
+        checked_websites_count=search.checkedWebsitesCount,
+        last_search_cursor=search.lastSearchCursor,
+        is_completed=search.completedAt is not None,
+    )
 
 
 @router.get(

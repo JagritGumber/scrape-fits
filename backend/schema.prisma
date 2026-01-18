@@ -10,14 +10,25 @@ generator client {
 }
 
 model Session {
+  id        Int           @id @default(autoincrement())
+  createdAt DateTime      @default(now())
+  name      String        @default("Untitled session")
+  search    SessionSearch?
+  results   SessionResult[]
+}
+
+model SessionSearch {
   id                   Int       @id @default(autoincrement())
   createdAt            DateTime  @default(now())
+  session              Session   @relation(fields: [sessionId], references: [id])
+  sessionId            Int       @unique
   query                String
   issuesFilter         String
   maxResultsRequested  Int
   checkedWebsitesCount Int       @default(0)
   lastSearchCursor     String?
-  results              SessionResult[]
+  status               String
+  completedAt          DateTime?
 }
 
 model SessionResult {

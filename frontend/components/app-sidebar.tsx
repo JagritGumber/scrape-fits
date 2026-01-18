@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { Menu, PencilLine, Settings } from "lucide-react";
 
@@ -7,17 +9,19 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 type Session = {
   id: number;
   created_at: string;
-  query: string;
+  name: string;
+  is_configured: boolean;
+  is_completed: boolean;
 };
 
-const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "/api";
 
 async function fetchSessions(): Promise<Session[]> {
   const response = await fetch(`${BACKEND_URL}/sessions`);
@@ -30,14 +34,6 @@ async function fetchSessions(): Promise<Session[]> {
 async function createSession(): Promise<Session> {
   const response = await fetch(`${BACKEND_URL}/sessions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query: "",
-      issues: [],
-      max_results: 0,
-    }),
   });
 
   if (!response.ok) {
@@ -48,6 +44,7 @@ async function createSession(): Promise<Session> {
 }
 
 export function AppSidebar() {
+  const { selectedSessionId, setSelectedSessionId } = useSidebar();
   const [sessions, setSessions] = React.useState<Session[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [creating, setCreating] = React.useState(false);
@@ -63,6 +60,9 @@ export function AppSidebar() {
         const data = await fetchSessions();
         if (active) {
           setSessions(data);
+          if (data.length > 0 && selectedSessionId === null) {
+            setSelectedSessionId(data[0].id);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -81,7 +81,7 @@ export function AppSidebar() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedSessionId, setSelectedSessionId]);
 
   async function handleNewSession() {
     try {
@@ -123,9 +123,7 @@ export function AppSidebar() {
             Loading sessions…
           </div>
         )}
-        {error && (
-          <div className="px-2 text-xs text-destructive">{error}</div>
-        )}
+        {error && <div className="px-2 text-xs text-destructive">{error}</div>}
         {!loading && !error && sessions.length === 0 && (
           <div className="px-2 text-xs text-muted-foreground">
             No sessions yet.
@@ -139,11 +137,14 @@ export function AppSidebar() {
                 className={cn(
                   "flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs",
                   "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  selectedSessionId === session.id &&
+                    "bg-sidebar-accent text-sidebar-accent-foreground",
                 )}
+                onClick={() => {
+                  setSelectedSessionId(session.id);
+                }}
               >
-                <span className="line-clamp-2">
-                  {session.query || "Untitled session"}
-                </span>
+                <span className="line-clamp-2">{session.name}</span>
               </button>
             </li>
           ))}
@@ -160,4 +161,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-

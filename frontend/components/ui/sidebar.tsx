@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -5,13 +7,15 @@ import { cn } from "@/lib/utils";
 type SidebarContextValue = {
   open: boolean;
   toggle: () => void;
+  selectedSessionId: number | null;
+  setSelectedSessionId: (id: number | null) => void;
 };
 
 const SidebarContext = React.createContext<SidebarContextValue | undefined>(
   undefined,
 );
 
-function useSidebar() {
+export function useSidebar() {
   const context = React.useContext(SidebarContext);
   if (!context) {
     throw new Error("Sidebar components must be used within <SidebarProvider>");
@@ -29,13 +33,18 @@ export function SidebarProvider({
   defaultOpen = false,
 }: SidebarProviderProps) {
   const [open, setOpen] = React.useState(defaultOpen);
+  const [selectedSessionId, setSelectedSessionId] = React.useState<
+    number | null
+  >(null);
 
   const toggle = React.useCallback(() => {
     setOpen((value) => !value);
   }, []);
 
   return (
-    <SidebarContext.Provider value={{ open, toggle }}>
+    <SidebarContext.Provider
+      value={{ open, toggle, selectedSessionId, setSelectedSessionId }}
+    >
       <div
         data-sidebar-open={open ? "true" : "false"}
         className="flex min-h-screen w-full bg-background text-foreground"
@@ -138,4 +147,3 @@ export function SidebarTrigger({
     </button>
   );
 }
-
