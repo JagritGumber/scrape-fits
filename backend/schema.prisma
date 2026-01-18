@@ -1,0 +1,15 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.db"
+}
+
+generator client {
+  provider  = "prisma-client-py"
+  interface = "asyncio"
+  output    = "orm"
+}
+
+model Example {
+  id Int @id @default(autoincrement())
+}
+
